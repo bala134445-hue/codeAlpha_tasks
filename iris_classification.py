@@ -1,66 +1,90 @@
+"""
+Task 1 - Iris Flower Classification
+-------------------------------------
+Loads the Iris dataset, trains multiple classifiers, evaluates them,
+and prints a comparison along with a detailed report for the best model.
+"""
+
 import pandas as pd
-import matplotlib.pyplot as plt
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
-# Load Dataset
-df = pd.read_csv("Iris.csv")
+# ---------------------------------------------------
+# 1. Load Data
+# ---------------------------------------------------
+DATA_PATH = "Iris.csv"   # change path if needed
+df = pd.read_csv(r"C:\Users\ADMIN\Downloads\Iris.csv")
 
-# Display first 5 rows
-print("Dataset Preview:")
-print(df.head())
+# Drop the Id column if present (not a useful feature)
+if "Id" in df.columns:
+    df = df.drop(columns=["Id"])
 
-# Remove Id column if present
-if 'Id' in df.columns:
-    df = df.drop('Id', axis=1)
+print("Dataset shape:", df.shape)
+print("\nFirst 5 rows:\n", df.head())
+print("\nClass distribution:\n", df["Species"].value_counts())
 
-# Check for missing values
-print("\nMissing Values:")
-print(df.isnull().sum())
+# ---------------------------------------------------
+# 2. Prepare Features & Labels
+# ---------------------------------------------------
+X = df.drop(columns=["Species"])
+y = df["Species"]
 
-# Features and Target
-X = df.iloc[:, :-1]
-y = df.iloc[:, -1]
+le = LabelEncoder()
+y_encoded = le.fit_transform(y)   # Iris-setosa -> 0, Iris-versicolor -> 1, Iris-virginica -> 2
 
-# Split Dataset
 X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=42
+    X, y_encoded, test_size=0.2, random_state=42, stratify=y_encoded
 )
 
-# Train Model
-model = RandomForestClassifier(n_estimators=100, random_state=42)
-model.fit(X_train, y_train)
+# Scale features (helps KNN, SVM, Logistic Regression)
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
 
-# Predict
-y_pred = model.predict(X_test)
+# ---------------------------------------------------
+# 3. Train & Compare Multiple Models
+# ---------------------------------------------------
+models = {
+    "Logistic Regression": LogisticRegression(max_iter=200),
+    "K-Nearest Neighbors": KNeighborsClassifier(n_neighbors=5),
+    "Decision Tree": DecisionTreeClassifier(random_state=42),
+    "Random Forest": RandomForestClassifier(n_estimators=100, random_state=42),
+    "SVM (RBF Kernel)": SVC(kernel="rbf", C=1.0),
+}
 
-# Accuracy
-print("\nAccuracy Score:")
-print(accuracy_score(y_test, y_pred))
+results = {}
+print("\n" + "=" * 50)
+print("MODEL COMPARISON")
+print("=" * 50)
 
-# Classification Report
-print("\nClassification Report:")
-print(classification_report(y_test, y_pred))
+for name, model in models.items():
+    model.fit(X_train_scaled, y_train)
+    preds = model.predict(X_test_scaled)
+    acc = accuracy_score(y_test, preds)
+    cv_scores = cross_val_score(model, X_train_scaled, y_train, cv=5)
+    results[name] = acc
+    print(f"{name:22s} | Test Accuracy: {acc*100:6.2f}% | "
+          f"CV Mean: {cv_scores.mean()*100:6.2f}%")
 
-# Confusion Matrix
-print("\nConfusion Matrix:")
-print(confusion_matrix(y_test, y_pred))
+# ---------------------------------------------------
+# 4. Detailed Report for Best Model
+# ---------------------------------------------------
+best_model_name = max(results, key=results.get)
+best_model = models[best_model_name]
+best_preds = best_model.predict(X_test_scaled)
 
-# Feature Importance Graph
-importance = model.feature_importances_
+print("\n" + "=" * 50)
+print(f"BEST MODEL: {best_model_name}")
+print("=" * 50)
+print("\nClassification Report:\n",
+      classification_report(y_test, best_preds, target_names=le.classes_))
+print("Confusion Matrix:\n", confusion_matrix(y_test, best_preds))
 
-plt.figure(figsize=(8, 5))
-plt.bar(X.columns, importance)
-plt.title("Feature Importance")
-plt.xlabel("Features")
-plt.ylabel("Importance")
-plt.show()
 
-# Custom Prediction
-sample = [[5.1, 3.5, 1.4, 0.2]]
-prediction = model.predict(sample)
-
-print("\nPredicted Species:")
-print(prediction[0])
 
